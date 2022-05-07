@@ -5,6 +5,8 @@
 #include <string.h>
 #include <limits.h>
 
+//#define VERBOSE 			// add it from commandline or uncomment for debug mode
+
 #define ENTER(S) printf("Please enter %s:\n", S)
 #define MAX 50
 #define TEXTLEN 500			// for storing SQL queries
@@ -15,9 +17,10 @@ typedef struct info{		// database info
 } db_status_t;
 
 int traffic_officer(db_status_t *DB, int mode, int type, char *return_value);
-
+int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new);
+int create_with_single_named(db_status_t *DB, char *given_value, int mode, int id, int table_type);
 // function parameters for creating or updating an existing value, see create_movie for use of the enum
-enum add_or_update		{add_new_value, update_existing_value, write_new_movie = 8};			
+enum add_or_update		{add_new_value, update_existing_value, write_new_movie = 8, write_new_single_named = 2};			
 enum linked_data_mode	{data_not_linked = -1, manual, ask_user};								// used in linked_data (and true_id), manual won't ask user as it gets the ID itself
 enum db_data_type		{movie, person, reviewer, review, genre, characters, movie_genres}; 	// same order as the char versions in struct db_status_t **tables
 enum modify_mode		{add_data, remove_data, update_data};									// parameter for functions that determines mode 
@@ -123,12 +126,16 @@ int main_movie_view(PGconn *c, int id){
 	PGresult *detailed_res;
 	int new_row_count, new_col_count, row, col;
 	char movie_view_command[TEXTLEN];
-	printf("selected id is %d\n", id);
+
 	sprintf(movie_view_command, "SELECT movies.name, year, duration AS duration_in_minutes, studio, "		// all relevant movie data + director
 								"people.name AS director, nationality, language, age_rating, imdb_score, short_description "
 								"FROM movies, characters, people "
 								"WHERE movies_id = %d AND movies.id = characters.movies_id "
 								"AND characters.people_id = people.id AND profession = 'director'", id);
+	#ifdef VERBOSE
+		printf("\nselected movie ID is %d\n\n", id);
+		printf("movie_view_query: %s\n\n", movie_view_command);
+	#endif
 	detailed_res = PQexec(c, movie_view_command);
 	if(PQresultStatus(detailed_res) != PGRES_TUPLES_OK) {
 		printf("\nNo result creating detailed movie view\n");
@@ -157,7 +164,10 @@ int main_movie_view(PGconn *c, int id){
 								"LEFT JOIN genres ON movie_genres.genres_id = genres.id "					// match IDs with actual genre names
 								"WHERE movies_id = %d",
 								id);
-	printf("%s\n", movie_view_command);
+	#ifdef VERBOSE
+		printf("get genre query: %s\n\n", movie_view_command);
+	#endif
+
 	detailed_res = PQexec(c, movie_view_command);
 	if(PQresultStatus(detailed_res) != PGRES_TUPLES_OK) {
 		printf("\nNo result getting genres linked to movie\n");
@@ -179,6 +189,10 @@ int main_movie_view(PGconn *c, int id){
 	sprintf(movie_view_command, "SELECT characters.name, people.name, nationality "							// get people_id from characters that match movie ID
 								"FROM characters "" LEFT JOIN people ON people_id = people.id "				// match IDs with names
 								"WHERE movies_id = %d AND profession != 'director'", id);					// type can't be director
+	#ifdef VERBOSE 
+		printf("\nCharacter select query: %s\n\n", movie_view_command);
+	#endif
+	
 	detailed_res = PQexec(c, movie_view_command);
 	if (PQresultStatus(detailed_res) != PGRES_TUPLES_OK) {
 		printf("\nNo result getting characters linked to movie\n");
@@ -203,6 +217,10 @@ int main_movie_view(PGconn *c, int id){
 								"LEFT JOIN reviewer ON reviewer_id = reviewer.id "					
 								"WHERE movies_id = %d "
 								"ORDER BY publication DESC NULLS LAST", id);								// critics with a publication will be listed first
+	#ifdef VERBOSE
+		printf("\nGet reviews command: %s\n\n", movie_view_command);
+	#endif
+	
 	detailed_res = PQexec(c, movie_view_command);
 	if(PQresultStatus(detailed_res) != PGRES_TUPLES_OK) {
 		printf("\nNo result getting reviews linked to movie\n");
@@ -233,7 +251,10 @@ int main_movie_view(PGconn *c, int id){
 	*query	=	search criteria for list
 */
 int display_movie_list(PGconn *c, char *query){
-	printf("	Entering function display_movie_list\n");
+	#ifdef VERBOSE
+		printf("\n\nEntering function display_movie_list\n\n");
+		printf("Displaying query %s\n\n", query);
+	#endif
 	PGresult *main_res;
 	main_res = PQexec(c, query);
 	if(PQresultStatus(main_res) != PGRES_TUPLES_OK){
@@ -273,6 +294,7 @@ int display_movie_list(PGconn *c, char *query){
 		else
 			break;											// incorrect value, returning to main menu
 	}
+	printf("Back in main menu, press H for help\n");		// easier for navigation to say it after long interactions
 	return 0;
 }
 
@@ -285,7 +307,9 @@ int display_movie_list(PGconn *c, char *query){
 	Used where names need to be unique, return the number of rows the query is present in
 */
 int unique_value(PGconn *c, char *type, char *query){
-	printf("	Entering function unique_value\n");
+	#ifdef VERBOSE
+		printf("\n\nEntering function unique_value\n\n");
+	#endif
 	PGresult *res;
 	char search[MAX]; 
 	sprintf(search, "select * from %s where name = '%s'", type, query);
@@ -295,6 +319,9 @@ int unique_value(PGconn *c, char *type, char *query){
 		printf("Error searching for unique name (%s) from %s\n", query, type);
 		return 0;
 	}
+	#ifdef VERBOSE
+		printf("Looking for query: %s\nFound result rows: %d\n\n", query, PQntuples(res));
+	#endif
 	return PQntuples(res);		// 0 when the value is unique
 }
 
@@ -308,29 +335,26 @@ int unique_value(PGconn *c, char *type, char *query){
 	id				=	what parameter starts the loop, if updating only the required field will be asked and checked
 */
 int create_movie(db_status_t *DB, char *given_value, int mode, int id){ 		
-	printf("	Entering function create_movie\n");
 	getchar();
 	int i = id;															// messing with values to find out what values are needed
 	char **params = malloc(15 * sizeof(char *)); 						// assuming we need 8 params max for movies list, overkill
 	int limit = mode + id;
-	int infinite_loop = 0;
-	
-	if(given_value != NULL){
-		printf("Expecting return value\n");								// a certain value is wanted from function !!!CHECK HERE IF THERE IS TIME!!!
-		infinite_loop = 1;
-	}
-	
-	printf("starting at %d ending at %d\n", i, limit);
+	#ifdef VERBOSE
+		printf("\n\nEntering function create_movie\n\n");
+		printf("starting at %d ending at %d (see while loop)\n\n", i, limit);
+	#endif
 	while(i < limit){
 		switch(i){
 			case 0:														// get movie name
 				params[0] = readText("movie name");						
 				if(unique_value(DB->conn, "movies", params[0])){ 		// checking if movie is already in the database
 					printf("%s is already in the database!\n", params[0]);
+					free(params);
 					return 0;
 				}
 				if(strlen(params[0]) < 1){								// checking input length
 					printf("Cannot be empty!\n");						// if there are no checks values can be empty
+					free(params);
 					return 0;
 				}
 				break;
@@ -338,6 +362,7 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 				params[1] = readInt("year");							
 				if(!val_check(0, INT_MAX, atoi(params[1]))){
 					printf("Not allowed\n");
+					free(params);
 					return 0;
 				}
 				break;
@@ -345,6 +370,7 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 				params[2] = readNum("duration");						
 				if(!val_check(0, INT_MAX, atoi(params[2]))){
 					printf("Not allowed\n");
+					free(params);
 					return 0;
 				}
 				break;													
@@ -361,6 +387,7 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 				params[6] = readText("IMDb score");
 				if(!val_check(0, 10, atoi(params[6]))){
 					printf("Not allowed\n");
+					free(params);
 					return 0;
 				}
 				break;
@@ -371,11 +398,13 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 		i++;
 	}
 	
-	printf("calc value %d\n", limit - mode);
 	if(limit - mode == 2){												// one value was updated
 		strcpy(given_value, params[id]);
-		printf("returning value %s\n", given_value);
-		return 1;														// return only the asked field
+		#ifdef VERBOSE
+			printf("\n\nReturning value %s\n\n", given_value);
+		#endif
+		free(params);
+		return 1;														// return only the asked field, no new movie needs to be added
 	}
 	else if(given_value != NULL)
 		strcpy(given_value, params[id]);
@@ -384,11 +413,27 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 			params[j] = NULL;											// easier to check if field is empty
 		}
 	}
-																		// else a new movie was written and needs to be sent
-	update(DB->conn, "INSERT INTO movies(name, year, duration, studio, language, age_rating, imdb_score, short_description) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", 8, (const char **)params);
-	if(infinite_loop == 0){
-		printf("Would you like to link something to %s? y/n\n", params[0]);
-	}
+	char query[TEXTLEN];												
+	int director_id;
+	printf("Who's the director?\n");									// new movie needs to be linked to director, need a person id and movie id
+	director_id = true_id(person, data_not_linked, DB, ask_user);		// user true id to get director id, user can even create new person
+	if(director_id < 0){
+		printf("Error selecting director for movie\n");
+		free(params);
+		return 0;
+	}																	// add movie to database
+	update(DB->conn, 	"INSERT INTO movies (name, year, duration, studio, language, age_rating, imdb_score, short_description) "
+						"VALUES($1,$2,$3,$4,$5,$6,$7,$8)", 8, (const char **)params);
+	
+	sprintf(query, 		"INSERT INTO characters (profession, people_id, movies_id) "	// link director to movie
+						"VALUES ('director', %d, "										
+						"(SELECT id FROM movies WHERE name = '%s'))",					// because I don't actually know the id of the movie just created 
+						director_id, params[0]);										// I'll have to ask it by name from the movies table
+	#ifdef VERBOSE
+		printf("\n\n Movie added successfully\nAdding director link: %s\n\n", query);
+	#endif
+	
+	update(DB->conn, query, 0, NULL); 
 	free(params);
 	return 1;
 }
@@ -401,23 +446,33 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 	Used for updating an existing value in the database
 */
 int update_db_value(int type, int id, db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function update_db_value\n");
+		printf("ID value: %d (needs to be > 0)\n\n", id);
+	#endif
 	if(id < 0)					// true_id failed
 		return 0;	
-	printf("	Entering function update_db_value\n");
 	getchar();
 	PGresult *res;
 	char query[TEXTLEN];
-	sprintf(query, "SELECT * FROM %s LIMIT 1", DB->tables[type]);
+	
+	if(type == review)									// not letting the user change the movie or reviewer id, only the grade or text review
+		strcpy(query, "SELECT id, grade, text_review FROM review LIMIT 1");
+	else
+		sprintf(query, "SELECT * FROM %s LIMIT 1", DB->tables[type]);
+	
+	#ifdef VERBOSE
+		printf("\n\nDisplaying options to user: %s\n\n", query);
+	#endif
+	
 	res = PQexec(DB->conn, query);
 	if(PQresultStatus(res) != PGRES_TUPLES_OK) {
 		printf("Failed to get %s table cell names (update_db_value)\n", DB->tables[type]);
 		return 0;
 	}
-	//int row_count = PQntuples(res);
 	int col_count = PQnfields(res);
 	char selected_col[MAX];								// column to be changed
 	char new_value[MAX];								// new value to be added
-	//int idx_to_id[row_count];							// for matching printed out numbers to actual ids in the database which might not be in a row
 	int col, input;
 	for(col = 1; col < col_count; col++)				// show all columns except ID to user
 		printf("%d. %s\n", col, PQfname(res, col));
@@ -428,8 +483,10 @@ int update_db_value(int type, int id, db_status_t *DB){
 		return 0;
 	}
 	strcpy(selected_col, PQfname(res, input));			// store column value
-	printf("\nTrying to update column %s, table %s\n\n", selected_col, DB->tables[type]);
-	
+
+	#ifdef VERBOSE
+		printf("\nTrying to update column %s, table %s\n\n", selected_col, DB->tables[type]);
+	#endif
 	
 	PQclear(res);
 
@@ -439,22 +496,72 @@ int update_db_value(int type, int id, db_status_t *DB){
 			if(!create_movie(DB, new_value, update_existing_value, input - 1)){
 					return 0; 										// some kind of error in reading
 				}
-				sprintf(query, 	"UPDATE %s "						// table name, held in struct, is 'type' input to function
-								"SET %s = '%s' "						// user selected column and new value
-								"WHERE id = %d"						// searching by the ID provided to the function
-								, DB->tables[type], selected_col, new_value, id
-				);
 			break;
 		case person:
-			
+			if(!create_with_single_named(DB, new_value, update_existing_value, input - 1, person)){
+				return 0;
+			}
 			break;
 		case reviewer:
+			if(!create_with_single_named(DB, new_value, update_existing_value, input - 1, reviewer)){
+				return 0;
+			}
 			break;
 		case genre:
+			if(!create_with_single_named(DB, new_value, update_existing_value, input - 1, genre)){
+				return 0;
+			}
+			break;
+		case review:											// with true_id we have the reviewer id to change, now we need the movie
+			sprintf(query, "SELECT movies_id, name, year , grade"
+							"FROM movies "
+							"LEFT JOIN review ON movies.id = review.movies_id "
+							"WHERE review.reviewer_id = %d ORDER BY name",
+							id);
+			res = PQexec(DB->conn, query);
+			if(PQresultStatus(res) != PGRES_TUPLES_OK) {
+				printf("Failed to get reviewer linked movies (update_db_value)\n");
+				return 0;
+			} 
+			if(PQntuples(res) < 1){
+				printf("Reviewer has left no reviews!!\n");
+				return 0;
+			}
+			for(int row = 0; row < PQntuples(res); row++){
+				printf("%d. ", row + 1);
+				for(col = 1; col < col_count; col++)				// show all columns except ID to user
+					printf("%-15s | ", PQgetvalue(res, row, col));
+				printf("\n");
+			}
+			
+			printf("Select column to edit: ");
+				scanf("%d", &input);
+
+			if(!val_check(1, col_count, input)){				// checking if selected column is valid
+				printf("Value not allowed\n");
+				return 0;
+			}
+			getchar();
+			strcpy(new_value, readText("updated value"));
+			sprintf(query, "UPDATE review "						// review is linked and need separate command
+							"SET %s = '%s' "
+							"WHERE movies_id = %s "
+							"AND reviewer_id = %d",
+							selected_col, new_value, PQgetvalue(res, input - 1, 0), id);
+			PQclear(res);
 			break;
 	}
-	
-	printf("\nUpdate command is: %s\n\n", query);
+	if(type != review){											// not a review, commands are the same
+		sprintf(query, 		"UPDATE %s "						// table name, held in struct, is 'type' input to function
+							"SET %s = '%s' "					// user selected column and new value
+							"WHERE id = %d"						// searching by the ID provided to the function
+							, DB->tables[type], selected_col, new_value, id
+			);
+	}
+	#ifdef VERBOSE
+		printf("\nUpdate command is: %s\n\n", query);
+	#endif
+
 	res = PQexec(DB->conn, query);
 	/*	// faulty check? Always fails but the update works, tested with movie updating
 	if(PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -479,53 +586,76 @@ int update_db_value(int type, int id, db_status_t *DB){
 	Returns 0 when updating goes wrong, needs to be checked, 1 if successful
 */
 int create_with_single_named(db_status_t *DB, char *given_value, int mode, int id, int table_type){
-	printf("	Entering function create_with_single_named\n");
+	#ifdef VERBOSE
+		printf("\n\nEntering function create_with_single_named\n\n");
+		printf("Mode: %d\nID: %d\nTable type %s\n\n", mode, id, DB->tables[table_type]);
+	#endif
+	
+	
+	int i = id;															// messing with values to find out what values are needed
+	int limit = mode + id;
 	char **params = malloc(5 * sizeof(char*));
 	if(params == NULL){
 		printf("Error allocating memory (create_with_single_named)\n");
 		return 0;
 	}
-	getchar();
-	params[0] = readText("name");							// get name
-	params[1] = NULL;
-	if(unique_value(DB->conn, DB->tables[table_type], params[0])){ 	// checking if name is already in the database
-		printf("%s is already in the database!\n", params[0]);
-		return 0;
-	}
-	if(strlen(params[0]) < 1){
-		printf("Name cannot be empty!\n");					// checking insert value length, cannot be empty
-		return 0;
-	}
-	if(table_type == person){								// people table, ask for nationality
-		params[1] = readText("nationality");
-		if(strlen(params[1]) < 1)
-			params[1] = NULL;					
+	getchar();															// same structure as create_movie function but different values are asked
+	while(i < limit){													// while loop allows to pick a specific value to get, used for updating if you need a nationality for example
+		switch(i){
+			case 0:														// all categories that use this function need an unique name first
+				params[0] = readText("name");							// get name
+				if(unique_value(DB->conn, DB->tables[table_type], params[0])){ 	// checking if name is already in the database
+					printf("%s is already in the database!\n", params[0]);
+					free(params);
+					return 0;
+				}
+				if(strlen(params[0]) < 1){
+					printf("Name cannot be empty!\n");					// checking insert value length, cannot be empty
+					free(params);
+					return 0;
+				}
+				break;
+			case 1:
+				if(table_type == person){								// people table, ask for nationality
+					params[1] = readText("nationality");
+					if(strlen(params[1]) < 1)
+						params[1] = NULL;					
+				}
+				else if(table_type == reviewer){
+					int reviewer_type;									// they're a 'professional' and have a publication
+					printf("Are they an user (1) or a critic (2)?\n");	
+					scanf("%d", &reviewer_type);
+					if(reviewer_type == 1) 								// its an user, no publication
+						params[1] = NULL;
+					else{
+						getchar();
+						params[1] = readText("publication");			// critic, ask publication
+						if(strlen(params[1]) < 1){
+							printf("Name cannot be empty!\n");
+							free(params);
+							return 0;
+						}
+					}
+				}
+				break;
+		}
+		i++;
 	}
 	
-	if(mode == update_existing_value){						// updating value not adding
-		strcpy(given_value, params[0]);
-		//strcpy(given_value[1], params[1]);
-		return 1;
-	}
-	if(given_value != NULL){								// updating value not adding
-		strcpy(given_value, params[0]);
+	if(mode == update_existing_value || given_value != NULL){			// updating value not adding, don't need to go further
+		strcpy(given_value, params[id]);								// given_value is not NULL when the function is 
+		if(mode == update_existing_value){								// called within true_id recursively and it needs
+			free(params);												// the name of the added thing back
+			
+			#ifdef VERBOSE
+				printf("\n\nUpdating data\nReturn result: %s\n\n", given_value);
+			#endif
+			
+			return 1;
+		}
 	}
 
-															// adding a new value to database
-	if(table_type == reviewer){								// inserted a critic, need to ask if 
-		int reviewer_type;									// they're a 'professional' and have a publication
-		printf("Are they an user (1) or a critic (2)?\n");	
-		scanf("%d", &reviewer_type);
-		if(reviewer_type == 1) 								// its an user, no publication
-			params[1] = NULL;
-		else{
-			getchar();
-			params[1] = readText("publication");			// critic, ask publication
-			if(strlen(params[1]) < 1){
-				printf("Name cannot be empty!\n");
-				return 0;
-			}
-		}
+	if(table_type == reviewer){								// not updating, actual queries for adding data	
 		update(DB->conn, "INSERT INTO reviewer(name, publication) VALUES($1,$2)", 2, (const char **)params);
 	}
 	else if(table_type == person){
@@ -540,7 +670,7 @@ int create_with_single_named(db_status_t *DB, char *given_value, int mode, int i
 	}
 	
 	free(params);
-	return 0;
+	return 1;
 }
 
 /*
@@ -554,33 +684,44 @@ int create_with_single_named(db_status_t *DB, char *given_value, int mode, int i
 					always 0 on updating and removing info, why ask to create a new row that you immediately want to delete
 */
 int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
-	printf("	Entering function true_id\n");
+	#ifdef VERBOSE	
+		printf("\n\nEntering function true_id\n\n");
+		printf("Table type: %s\nlinker_mod: %d\nif_ask_new: %d\n\n", DB->tables[table_type], linker_mod, if_ask_new);
+	#endif
+	
 	PGresult *res;
 	char query[TEXTLEN];
 	int result;
 	if(linker_mod < 0){																// simple universal query for data
-		sprintf(query, 	"SELECT id, name FROM %s WHERE name IS NOT NULL", DB->tables[table_type]);	// get all rows from input table
+		if(table_type == review){			// reviews sit in a linked table, I need both the reviewer and movie ID
+			printf("Select reviewer:\n");
+			table_type = reviewer;			// this case is only triggered with updating a review, see update_db_value
+		}
+		sprintf(query, 	"SELECT id, name FROM %s WHERE name IS NOT NULL ORDER BY name", DB->tables[table_type]);	// get all rows from input table
 	}
 	else{
 		switch(table_type){															// linked data needs special commands
 			case review:															// because the data is linked between 3 tables
 				sprintf(query, 	"SELECT reviewer_id, name, publication, grade FROM review "
-								"LEFT JOIN reviewer ON review.reviewer_id = reviewer.id "	// link revies with reviewers
-								"WHERE review.movies_id = %d ", linker_mod);
+								"LEFT JOIN reviewer ON review.reviewer_id = reviewer.id "	// link reviews with reviewers
+								"WHERE review.movies_id = %d ORDER BY name", linker_mod);
 				break;
 			case characters:
 				sprintf(query, 	"SELECT people_id, characters.name, people.name, profession FROM characters "
 								"LEFT JOIN people ON characters.people_id = people.id "		// link characters to people
-								"WHERE characters.movies_id = %d", linker_mod);
+								"WHERE characters.movies_id = %d ORDER BY people.name", linker_mod);
 				break;																
 			case movie_genres:														
 				sprintf(query, 	"SELECT genres_id, name FROM genres "
 								"LEFT JOIN movie_genres ON movie_genres.genres_id = genres.id "
-								"WHERE movie_genres.movies_id = %d", linker_mod);			// link movie_genres to genres
+								"WHERE movie_genres.movies_id = %d ORDER BY name", linker_mod);	// link movie_genres to genres
 				break;
 		}
 	}
-	printf("true_id query: %s\n", query);
+	#ifdef VERBOSE
+		printf("\ntrue_id query: %s\n\n", query);
+	#endif
+	
 	res = PQexec(DB->conn, query);
 	if(PQresultStatus(res) != PGRES_TUPLES_OK) {
 		printf("\nNo result trying to print all ids and names (true_id)\n\n");
@@ -612,12 +753,11 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 	}
 	selected_row--;
 	/*
-		Magic when it works but hard to fix
 		Able to create linked data to data that is not yet 
 		in the database.
 		
 		For example creating a character in a movie linked to a movie
-		that doesn't exist yet played by a person that also doesn't exist.
+		that doesn't exist yet played by a person who also doesn't exist.
 
 		Will recursively loop deeper until completing queries backwards,
 		drawback is that if the first character creation will fail the
@@ -626,10 +766,21 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 	if(selected_row == row_count){													// used like recursion? Function will call traffic_officer with
 		PQclear(res);																// required data type, which can even call true_id again in itself
 		char reach_around_result[MAX] = {" "};										// infinite recursion loops shouldn't be possible, I think
-		traffic_officer(DB, add_data, table_type, reach_around_result);
-		printf("reach around result %s\n", reach_around_result);
+		
+		#ifdef VERBOSE
+			printf("\nRECURSION START\n\n");
+		#endif
+		
+		if(!traffic_officer(DB, add_data, table_type, reach_around_result))
+			return -1;
+		
 		sprintf(query, "SELECT id FROM %s WHERE name = '%s'", DB->tables[table_type], reach_around_result);
-		printf("query: %s\n", query);
+		#ifdef VERBOSE
+			printf("RECURISON SUCCESSFUL\n");
+			printf("Result %s\n", reach_around_result);
+			printf("Getting final ID query: %s\n\n", query);
+		#endif
+		
 		res = PQexec(DB->conn, query);
 		if(PQresultStatus(res) != PGRES_TUPLES_OK) {
 			printf("\nNo result trying to print all ids and names (true_id)\n\n");
@@ -639,7 +790,11 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 	}
 	else
 		result = atoi(PQgetvalue(res, selected_row, 0));
-	printf("return id %d\n", result);
+	
+	#ifdef VERBOSE
+		printf("\nRETURNING VALUE %d\n\n", result);
+	#endif
+
 	PQclear(res);
 	return result;
 }
@@ -656,42 +811,58 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 	mode			=	if the user is here from the modify menu or from browing movies (in which case we know the movie ID)
 	id				=	if the user got here from browsing menu it is the current movie's ID
 	person_type		=	if a character is added it carries an enum for actor/actress/director
+	is_allowed		=	parameter that will be included in true_id call, marks if true_id will offer to create new row or not
+						for example updating something it will not ask if user wants to create new data
 */
-int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table, int mode, int id, int person_type){
-	printf("	Entering function linked_data\n");
+int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table, int mode, int id, int person_type, int is_allowed){
+	#ifdef VERBOSE
+		printf("\n\nEntering function linked_data\n\n");
+		printf("%s -> %s <- %s\n", DB->tables[link_source], DB->tables[link_table], DB->tables[link_dest]);
+	#endif
+
 	getchar();
 	printf("Select %s:\n", DB->tables[link_source]);
 	int from_id, to_id;
 	PGresult *res;
 
-	from_id = true_id(link_source, data_not_linked, DB, 1);	// find out what the user wants, origin table
+	from_id = true_id(link_source, data_not_linked, DB, ask_user);	// find out what the user wants, origin table
 	if(from_id < 0)											// true_id failed, exit
 		return 0;
 	if(mode == manual)										// destination id already known as function parameter int id 
 		to_id = id;
 	else{													// ask user for destination, use true_id again
 		printf("Select %s:\n", DB->tables[link_dest]);
-		to_id = true_id(link_dest, data_not_linked, DB, 1);
+		to_id = true_id(link_dest, data_not_linked, DB, is_allowed);
 		if(to_id < 0)
 			return 0;
+	}	
+	char query[TEXTLEN];									// characters need to be checked later when we know if they're and actor / director
+	if(link_table != characters){							// that way the same person can play multiple characters or be the director and play a character
+		sprintf(query, 	"SELECT * FROM %s WHERE %s_id = %d AND %s_id = %d", // checking if linked value would be unique, IDs cannot match
+						DB->tables[link_table], DB->tables[link_dest], to_id, DB->tables[link_source], from_id);
+		#ifdef VERBOSE
+			printf("\nUnique name check query: %s\n\n", query);// same genres can't be added to 1 movie, linking same person to movie
+		#endif
+		
+		res = PQexec(DB->conn, query);
+		if(PQresultStatus(res) == PGRES_FATAL_ERROR) {
+			printf("Failure (%s).\n", PQresultErrorMessage(res));
+			printf("Error searching for unique name (linked_data))\n");
+			return 0;
+		}
+		if(PQntuples(res) > 0){
+			printf("Value already linked to table!!\n");					// value is already in table, exit
+			return 0;
+		}
+		PQclear(res);
 	}
-	char query[TEXTLEN];
-	sprintf(query, 	"SELECT * FROM %s WHERE %s_id = %d AND %s_id = %d", // I love modularity, checking if linked value would be unique, IDs cannot match
-					DB->tables[link_table], DB->tables[link_dest], to_id, DB->tables[link_source], from_id);
-	printf("unique value check query: %s\n", query);					// same genres can't be added to 1 movie, linking same person to movie
 	
-	res = PQexec(DB->conn, query);
-	if(PQresultStatus(res) == PGRES_FATAL_ERROR) {
-		printf("Failure (%s).\n", PQresultErrorMessage(res));
-		printf("Error searching for unique name (linked_data))\n");
-		return 0;
-	}
-	if(PQntuples(res) > 0){
-		printf("Value already linked to table!!\n");					// value is already in table, exit
-		return 0;
-	}
 
 	char **params = malloc(3 * sizeof(char*));
+	if(params == NULL){
+		printf("Error allocating memory (linked_data)");
+		return 0;
+	}
 
 	switch(link_table){
 		case movie_genres:												// linking genre id to movie id
@@ -712,26 +883,48 @@ int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table,
 				PGresult *res;
 				sprintf(query, 	"SELECT * FROM characters WHERE name = '%s' "
 								"AND movies_id = %d", params[0], to_id);
-				printf("link_table character check: %s\n", query);
+				#ifdef VERBOSE
+					printf("\nUnique characters check query: %s\n\n", query);// same genres can't be added to 1 movie, linking same person to movie
+				#endif
 				res = PQexecParams(DB->conn, query, 0, NULL, NULL, NULL, NULL, 0);
 				if(PQresultStatus(res) == PGRES_FATAL_ERROR) {
 					printf("Failure (%s).\n", PQresultErrorMessage(res));
 					printf("Failed to check unique character (linked_data)\n");
-					return 0;
+					break;
 				}
 				if(strlen(params[0]) < 1 || PQntuples(res) > 0)			// checking if character already exists in given movie
-					return 0;
+					break;
 				PQclear(res);
 			}
 			else
 				params[0] = NULL;			
-			input--;
+			input--;	
+			sprintf(query, 	"SELECT * FROM characters WHERE "				// actual characters unique check, 
+							"people_id = %d AND movies_id = %d "			// all 4 parameters cannot be the same
+							"AND profession = '%s' AND name = '%s'", 			// different characters played by the same person are allowed
+						from_id, to_id, person_types[input], params[0]);
+			
+			#ifdef VERBOSE
+				printf("\nUnique characters check query: %s\n\n", query);// same genres can't be added to 1 movie, linking same person to movie
+			#endif
+			
+			res = PQexec(DB->conn, query);
+			if(PQresultStatus(res) == PGRES_FATAL_ERROR) {
+				printf("Failure (%s).\n", PQresultErrorMessage(res));
+				printf("Error searching for unique name (linked_data))\n");
+				break;
+			}
+			if(PQntuples(res) > 0){
+				printf("Value already linked to table!!\n");					// value is already in table, exit
+				break;
+			}
 			sprintf(query, 	"INSERT INTO characters(name, people_id, movies_id, profession) "
 							"VALUES ($1, %d, %d, '%s')", from_id, to_id, person_types[input]);
 			printf("\nlinked data query: %s\n\n", query);
 			update(DB->conn, query, 1, (const char**) params);
 			break;
 		case review:													// create a review and link it to reviewer and movie
+			getchar();
 			params[0] = readText("short review");
 			params[1] = readText("grade 0.0 - 10");
 			if(!val_check(0, 10, atoi(params[1]))){
@@ -765,12 +958,16 @@ int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table,
 	for_deletion_linker	=	if linked data is deleted I need 2 IDs
 */
 int is_director(int mode, int for_deletion, int for_deletion_linker, db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function is_director\n");
+	#endif
+	
 	enum delete_mode{text_search = 1, list_search};
 	PGresult *res;
 	char query[TEXTLEN];
 	switch(mode){
 		case person:					// deleting person
-			sprintf(query, 	"SELECT id FROM characters WHERE "
+			sprintf(query, 			"SELECT id FROM characters WHERE "
 									"people_id = %d AND profession = 'director'", for_deletion);
 			res = PQexec(DB->conn, query);
 			if(PQresultStatus(res) == PGRES_FATAL_ERROR) {
@@ -795,11 +992,21 @@ int is_director(int mode, int for_deletion, int for_deletion_linker, db_status_t
 			}
 			if(PQntuples(res) > 0){		// Link up for deletion is a director link, movie and reviews for it will be deleted!! 
 				sprintf(query, 		"DELETE FROM movies WHERE id = %d", for_deletion);
+				
+				#ifdef VERBOSE
+					printf("\n\nDELETE command: %s query\n\n", query);
+				#endif
+				
 				update(DB->conn, query, 0, NULL);
 				PQclear(res);
 				return 1;
 			}
 	}
+
+	#ifdef VERBOSE
+		printf("\n\nDELETE command: %s query\n\n", query);
+	#endif
+
 	PQclear(res);
 	return 0;							// if input character or person is not a director returning 0 
 }
@@ -817,15 +1024,18 @@ int is_director(int mode, int for_deletion, int for_deletion_linker, db_status_t
 			|___________________________________________________________________|
 */
 int database_delete(int table_type, db_status_t *DB){
-	printf("	Entering function database_delete\n\n");
+	#ifdef VERBOSE
+		printf("\n\nEntering function database_delete\n\n");
+	#endif
+	
 	enum delete_mode{text_search = 1, list_search};									// search modes, text_search means user knows the name, list_search will list all possible options
 	char query[TEXTLEN];
 	int mode, for_deletion, for_deletion_linker = 0;								// for_deletion_linker is for linked data that needs 2 IDs to remove from separate table
-
-	if(table_type == review || table_type == characters || table_type == movie_genres || table_type == person){
+	if(table_type == characters || table_type == person)						// these options to not have the choice to type in what to remove
+		printf("\nWARNING: Deleting a director will delete the movie and characters linked to it (actors remain)!!\n\n");
+	
+	if(table_type == review || table_type == characters || table_type == movie_genres){
 		// Warn the user that deleting a person linked as director will wipe all movies linked to them
-		if(table_type == characters || table_type == person)						// these options to not have the choice to type in what to remove
-				printf("\nWARNING: Deleting a director will delete the movie and characters linked to it (actors remain)!!\n\n");
 		for_deletion = true_id(movie, data_not_linked, DB, 0);						// same for all linked data, I need the movie ID first
 		if(for_deletion < 0){ 														// true_id will return -1 if value not present
 			printf("No results!\n");
@@ -900,7 +1110,9 @@ int database_delete(int table_type, db_status_t *DB){
 		printf("No results!\n");
 		return 0;
 	} 
-	
+	#ifdef VERBOSE
+		printf("DELETE COMMAND: %s\n\n", query);
+	#endif
 	update(DB->conn, query, 0, NULL);
 	return 0;
 }
@@ -918,7 +1130,12 @@ int database_delete(int table_type, db_status_t *DB){
 	return_value	=	return is expected in function that called it, true_id recursion
 */
 int traffic_officer(db_status_t *DB, int mode, int type, char *return_value){
+	#ifdef VERBOSE
+		printf("\n\nEntering function traffic_officer\n\n");
+	#endif
+	
 	enum menu_selection{add_, remove_, update_};
+	int success = 0;
 	if(mode == remove_)
 		database_delete(type, DB);
 	else{
@@ -926,25 +1143,25 @@ int traffic_officer(db_status_t *DB, int mode, int type, char *return_value){
 			case add_:
 				switch(type){
 					case movie:
-						create_movie(DB, return_value, write_new_movie, 0);
+						success = create_movie(DB, return_value, write_new_movie, 0);
 						break;
 					case person:
-						create_with_single_named(DB, return_value, add_new_value, 0, type);
+						success = create_with_single_named(DB, return_value, write_new_single_named, 0, type);
 						break;
 					case reviewer:
-						create_with_single_named(DB, return_value, add_new_value, 0, type);
+						success = create_with_single_named(DB, return_value, write_new_single_named, 0, type);
 						break;
 					case review:
-						linked_data(DB, reviewer, movie, review, ask_user, 0, 0);
+						linked_data(DB, reviewer, movie, review, ask_user, 0, 0, manual);
 						break;
 					case genre:
-						create_with_single_named(DB, return_value, add_new_value, 0, type);
+						success = create_with_single_named(DB, return_value, write_new_single_named, 0, type);
 						break;
 					case characters:
-						linked_data(DB, person, movie, characters, ask_user, 0, 0);
+						linked_data(DB, person, movie, characters, ask_user, 0, 0, ask_user);
 						break;
 					case movie_genres:
-						linked_data(DB, genre, movie, movie_genres, ask_user, 0, 0);
+						linked_data(DB, genre, movie, movie_genres, ask_user, 0, 0, ask_user);
 						break;
 				}
 				break;
@@ -953,7 +1170,7 @@ int traffic_officer(db_status_t *DB, int mode, int type, char *return_value){
 				break;
 		}
 	}
-	return 0;
+	return success;
 }
 
 /*
@@ -961,6 +1178,9 @@ int traffic_officer(db_status_t *DB, int mode, int type, char *return_value){
 	talks to traffic_officer
 */
 int modify_data(db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function modify_data\n\n");
+	#endif
 	int rw_mode, type, max_val = 5;
 	printf(	" 1. Add\n"
 			" 2. Remove\n"
@@ -993,12 +1213,17 @@ int modify_data(db_status_t *DB){
 	}
 	type--;
 
-	traffic_officer(DB, rw_mode, type, NULL);	
+	traffic_officer(DB, rw_mode, type, NULL);
+	printf("Back in main menu, press H for help\n");
 	return 0;
 }
 
 // make top 5 according to critics or users, requirement
 int top_five(db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function top_five\n\n");
+	#endif
+	
 	int top_type;
 	char is_or_isnt[2][6] = { {"IS"}, {"IS NOT"} };		// lazy but easy
 	char query[TEXTLEN];
@@ -1015,6 +1240,10 @@ int top_five(db_status_t *DB){
 					"ORDER BY avg_rating DESC NULLS LAST "						// order by grade, movies with no reviews last
 					"LIMIT 5", is_or_isnt[top_type - 1]);						// LIMIT to 5 top results
 
+	#ifdef VERBOSE
+		printf("TOP 5 query: %s\n", query);
+	#endif
+	
 	display_movie_list(DB->conn, query);										// make an interactive movie list
 	return 0;
 }
@@ -1028,6 +1257,10 @@ enum db_search_mode{text_query = 1, direct_id};
 	called in next function
 */
 char* db_search_query_list(int table_type, int mode, char *category, char *equals){
+	#ifdef VERBOSE
+		printf("\n\nEntering function db_search_query_list\n\n");
+	#endif
+	
 	char movie_base[TEXTLEN] = { 	"SELECT name, year, id "							// regular movie search by name
 									"FROM movies "
 									"WHERE "
@@ -1076,7 +1309,6 @@ char* db_search_query_list(int table_type, int mode, char *category, char *equal
 		sprintf(query_tail, "%s.id = %s", category, equals);							// endings of the queries on top, this case by id
 	else
 		sprintf(query_tail, "%s.name ILIKE '%%%s%%'", category, equals);				// search by name
-	printf("Query end is %s\n", query_tail);	
 	switch(table_type){
 		case movie:
 			return strcat(movie_base, query_tail);
@@ -1094,6 +1326,10 @@ char* db_search_query_list(int table_type, int mode, char *category, char *equal
 	Will use movie list function for interactive results
 */
 int db_search(db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function db_search\n\n");
+	#endif
+
 	int search_criteria, search_mode;
 	printf(			"Search by:\n"
 					"1. Movie name\n"
@@ -1149,12 +1385,19 @@ int db_search(db_status_t *DB){
 			strcpy(query, db_search_query_list(search_criteria, direct_id, DB->tables[search_criteria], num));
 			break; 
 	}
+	#ifdef VERBOSE
+		printf("Searching by query %s\n\n", query);
+	#endif
 	display_movie_list(DB->conn, query);
 	return 0;
 }
 
 // displaying publication average grades and reviewed movie count as a bonus, requirement for kodutöö
 void publication_average(db_status_t *DB){
+	#ifdef VERBOSE
+		printf("\n\nEntering function publication_average\n\n");
+	#endif
+	
 	char query[TEXTLEN] = {	"SELECT DISTINCT CASE "						// every publication once
 							"WHEN publication IS NULL THEN 'users' "	// users have publication NULL, changing the name for visual purposes
 							"ELSE publication "							// else show the publication
@@ -1167,6 +1410,11 @@ void publication_average(db_status_t *DB){
 							"GROUP BY publication "
 							"ORDER by avg_rating DESC NULLS LAST"
 							};
+	
+	#ifdef VERBOSE
+		printf("Publicaiton query: %s\n\n", query);
+	#endif
+	
 	display(DB->conn, query);
 }
 
@@ -1201,13 +1449,9 @@ int main(void){
 	for(int i = 0; i < 7; i++)
 		strcpy(DB.tables[i], table_types[i]);
 	char input;
-	int inloop = 1, loop = 0;
+	int inloop = 1;
 	helper_print();
 	while(inloop){							// main menu
-		if(inloop && loop){
-			printf("back in main menu, press H for help\n");
-		}
-		loop = 1;
 		scanf("%c", &input);
 		switch(input){
 			case '1':
@@ -1217,7 +1461,8 @@ int main(void){
 				modify_data(&DB);
 				break;
 			case '3':
-				traffic_officer(&DB, 0, review, NULL);
+				linked_data(&DB, reviewer, movie, review, ask_user, 0, 0, manual);
+				printf("Back in main menu, press H for help\n");
 				break;
 			case '4':
 				db_search(&DB);
@@ -1236,6 +1481,10 @@ int main(void){
 				break;
 		}
 	}
+	#ifdef VERBOSE
+		printf("Exiting program. Goodbye\n");
+	#endif
+
 	PQfinish(DB.conn);
 	return 0;
 }
