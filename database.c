@@ -98,11 +98,11 @@ void display(PGconn *c, char *query){						// display query, only used in publis
 	int col_count = PQnfields(res);
 	int row, col;
 	for(col = 0; col < col_count; col++)					// modified to show cell headers
-		printf("%-15s | ", PQfname(res, col));
+		printf("%-25s | ", PQfname(res, col));
 	printf("\n");
 	for(row = 0; row < row_count; row++){
 		for(col = 0; col < col_count; col++)
-			printf("%-15s | ", PQgetvalue(res, row, col));
+			printf("%-25s | ", PQgetvalue(res, row, col));
 		printf("\n");
 	}
 	PQclear(res);
@@ -202,7 +202,7 @@ int main_movie_view(PGconn *c, int id){
 	new_col_count = PQnfields(detailed_res);
 
 	for(row = 0; row < new_row_count; row++){
-		printf("%25s played by %s ", PQgetvalue(detailed_res, row, 0), PQgetvalue(detailed_res, row, 1));
+		printf("%25s played by %-25s ", PQgetvalue(detailed_res, row, 0), PQgetvalue(detailed_res, row, 1));
 		if(strlen(PQgetvalue(detailed_res, row, 2)) > 0)													// print nationality if there is one added
 			printf("(%s)", PQgetvalue(detailed_res, row, 2));
 		printf("\n");
@@ -216,7 +216,7 @@ int main_movie_view(PGconn *c, int id){
 								"FROM review "																// match IDs with reviewer names
 								"LEFT JOIN reviewer ON reviewer_id = reviewer.id "					
 								"WHERE movies_id = %d "
-								"ORDER BY publication DESC NULLS LAST", id);								// critics with a publication will be listed first
+								"ORDER BY publication NULLS LAST", id);								// critics with a publication will be listed first
 	#ifdef VERBOSE
 		printf("\nGet reviews command: %s\n\n", movie_view_command);
 	#endif
@@ -271,12 +271,12 @@ int display_movie_list(PGconn *c, char *query){
 	int row, col;
 	printf("     "); 										// leaving space for numbers, headings row won't have a number
 	for(col = 0; col < col_count - 1; col++)				// print heading
-		printf("%-25s | ", PQfname(main_res, col));
+		printf("%-35s | ", PQfname(main_res, col));
 	printf("\n");
 	for(row = 0; row < row_count; row++){					// print all matching movies numbered
 		printf("%3d. ", row + 1);
 		for(col = 0; col < col_count - 1; col++)			// the ID is also in the table but won't be shown, need it to match it to the row number
-			printf("%-25s | ", PQgetvalue(main_res, row, col));
+			printf("%-35s | ", PQgetvalue(main_res, row, col));
 		idx_to_id[row] = atoi(PQgetvalue(main_res, row, col)); // current row as index, database ID as value
 		printf("\n");
 	}
@@ -338,6 +338,11 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 	getchar();
 	int i = id;															// messing with values to find out what values are needed
 	char **params = malloc(15 * sizeof(char *)); 						// assuming we need 8 params max for movies list, overkill
+	if(params == NULL){
+		printf("Error allocating memory in create_movie\n");
+		return 0;
+	}
+	
 	int limit = mode + id;
 	#ifdef VERBOSE
 		printf("\n\nEntering function create_movie\n\n");
@@ -397,8 +402,7 @@ int create_movie(db_status_t *DB, char *given_value, int mode, int id){
 		}
 		i++;
 	}
-	
-	if(limit - mode == 2){												// one value was updated
+	if(limit - id < 3){													// one value was updated
 		strcpy(given_value, params[id]);
 		#ifdef VERBOSE
 			printf("\n\nReturning value %s\n\n", given_value);
@@ -472,7 +476,7 @@ int update_db_value(int type, int id, db_status_t *DB){
 	}
 	int col_count = PQnfields(res);
 	char selected_col[MAX];								// column to be changed
-	char new_value[MAX];								// new value to be added
+	char new_value[200];								// new value to be added
 	int col, input;
 	for(col = 1; col < col_count; col++)				// show all columns except ID to user
 		printf("%d. %s\n", col, PQfname(res, col));
@@ -513,31 +517,34 @@ int update_db_value(int type, int id, db_status_t *DB){
 			}
 			break;
 		case review:											// with true_id we have the reviewer id to change, now we need the movie
-			sprintf(query, "SELECT movies_id, name, year , grade"
+			sprintf(query, "SELECT movies_id, name, year, grade "
 							"FROM movies "
 							"LEFT JOIN review ON movies.id = review.movies_id "
 							"WHERE review.reviewer_id = %d ORDER BY name",
 							id);
+			#ifdef VERBOSE
+				printf("\nFinding left reviews: %s\n\n", query);
+			#endif
 			res = PQexec(DB->conn, query);
 			if(PQresultStatus(res) != PGRES_TUPLES_OK) {
 				printf("Failed to get reviewer linked movies (update_db_value)\n");
 				return 0;
-			} 
+			}
 			if(PQntuples(res) < 1){
 				printf("Reviewer has left no reviews!!\n");
 				return 0;
 			}
 			for(int row = 0; row < PQntuples(res); row++){
 				printf("%d. ", row + 1);
-				for(col = 1; col < col_count; col++)				// show all columns except ID to user
-					printf("%-15s | ", PQgetvalue(res, row, col));
+				for(col = 1; col <= col_count; col++)				// show all columns except ID to user
+					printf("%-35s | ", PQgetvalue(res, row, col));
 				printf("\n");
 			}
 			
-			printf("Select column to edit: ");
+			printf("Select movie review to edit: ");
 				scanf("%d", &input);
 
-			if(!val_check(1, col_count, input)){				// checking if selected column is valid
+			if(!val_check(1, PQntuples(res), input)){				// checking if selected column is valid
 				printf("Value not allowed\n");
 				return 0;
 			}
@@ -627,7 +634,7 @@ int create_with_single_named(db_status_t *DB, char *given_value, int mode, int i
 					scanf("%d", &reviewer_type);
 					if(reviewer_type == 1) 								// its an user, no publication
 						params[1] = NULL;
-					else{
+					else if(reviewer_type == 2){
 						getchar();
 						params[1] = readText("publication");			// critic, ask publication
 						if(strlen(params[1]) < 1){
@@ -636,6 +643,8 @@ int create_with_single_named(db_status_t *DB, char *given_value, int mode, int i
 							return 0;
 						}
 					}
+					else
+						return 0;
 				}
 				break;
 		}
@@ -733,10 +742,12 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 	if(row_count == 0)
 		return -1;
 	for(row = 0; row < row_count; row++){
-		printf("%d.", row + 1);
+		printf("%3d.", row + 1);
 		for(col = 1; col < col_count; col++)
 			if(strlen(PQgetvalue(res, row, col)) > 0)
-				printf(" %-25s |", PQgetvalue(res, row, col));
+				printf(" %-25s", PQgetvalue(res, row, col));
+					if(col_count > 2)
+						printf(" | ");
 		printf("\n");
 	}																				// print all names
 	if(if_ask_new){
@@ -867,7 +878,9 @@ int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table,
 	switch(link_table){
 		case movie_genres:												// linking genre id to movie id
 			sprintf(query, "INSERT INTO movie_genres(genres_id, movies_id) VALUES (%d, %d)", from_id, to_id);
-			printf("\nlinked data query: %s\n\n", query);
+			#ifdef VERBOSE
+				printf("\nlinked data query: %s\n\n", query);
+			#endif
 			update(DB->conn, query, 0, NULL);
 			break;
 		case characters:												// linking person id to movie id
@@ -920,12 +933,12 @@ int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table,
 			}
 			sprintf(query, 	"INSERT INTO characters(name, people_id, movies_id, profession) "
 							"VALUES ($1, %d, %d, '%s')", from_id, to_id, person_types[input]);
-			printf("\nlinked data query: %s\n\n", query);
 			update(DB->conn, query, 1, (const char**) params);
 			break;
 		case review:													// create a review and link it to reviewer and movie
 			getchar();
 			params[0] = readText("short review");
+			getchar();
 			params[1] = readText("grade 0.0 - 10");
 			if(!val_check(0, 10, atoi(params[1]))){
 				printf("Value not allowed\n");
@@ -1227,7 +1240,7 @@ int top_five(db_status_t *DB){
 	int top_type;
 	char is_or_isnt[2][6] = { {"IS"}, {"IS NOT"} };		// lazy but easy
 	char query[TEXTLEN];
-	printf("According to:\n1. Critics\n2. Users");
+	printf("According to:\n1. Critics\n2. Users\n");
 	scanf("%d", &top_type);
 	if(!val_check(1, 2, top_type))
 		return 0;
