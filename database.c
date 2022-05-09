@@ -98,11 +98,11 @@ void display(PGconn *c, char *query){						// display query, only used in publis
 	int col_count = PQnfields(res);
 	int row, col;
 	for(col = 0; col < col_count; col++)					// modified to show cell headers
-		printf("%-25s | ", PQfname(res, col));
+		printf("%-35s | ", PQfname(res, col));
 	printf("\n");
 	for(row = 0; row < row_count; row++){
 		for(col = 0; col < col_count; col++)
-			printf("%-25s | ", PQgetvalue(res, row, col));
+			printf("%-35s | ", PQgetvalue(res, row, col));
 		printf("\n");
 	}
 	PQclear(res);
@@ -144,6 +144,10 @@ int main_movie_view(PGconn *c, int id){
 
 	new_row_count = PQntuples(detailed_res);
 	new_col_count = PQnfields(detailed_res);
+	if(new_row_count < 1){
+		printf("Failed to get detailed movie view\n");
+		return 0;
+	}
 	printf("Info:\n");
 	for(col = 0; col < new_col_count; col++){																// print movie data
 		if(col == 4){ 																						// printing director, nationality immediately behind
@@ -535,7 +539,7 @@ int update_db_value(int type, int id, db_status_t *DB){
 				return 0;
 			}
 			for(int row = 0; row < PQntuples(res); row++){
-				printf("%d. ", row + 1);
+				printf("%3d. ", row + 1);
 				for(col = 1; col <= col_count; col++)				// show all columns except ID to user
 					printf("%-35s | ", PQgetvalue(res, row, col));
 				printf("\n");
@@ -767,8 +771,9 @@ int true_id(int table_type, int linker_mod, db_status_t *DB, int if_ask_new){
 		Able to create linked data to data that is not yet 
 		in the database.
 		
-		For example creating a character in a movie linked to a movie
-		that doesn't exist yet played by a person who also doesn't exist.
+		For example creating a character in a movie
+		that doesn't exist directed by someone who doesn't exist yet 
+		played by a person who also doesn't exist.
 
 		Will recursively loop deeper until completing queries backwards,
 		drawback is that if the first character creation will fail the
@@ -938,7 +943,6 @@ int linked_data(db_status_t *DB, int link_source, int link_dest, int link_table,
 		case review:													// create a review and link it to reviewer and movie
 			getchar();
 			params[0] = readText("short review");
-			getchar();
 			params[1] = readText("grade 0.0 - 10");
 			if(!val_check(0, 10, atoi(params[1]))){
 				printf("Value not allowed\n");
@@ -1066,7 +1070,7 @@ int database_delete(int table_type, db_status_t *DB){
 				printf("No results!\n");
 				return 0;
 			}
-			int result = is_director(review, for_deletion, for_deletion_linker, DB);// is it a director? in which case the whole movie gets wiped
+			int result = is_director(characters, for_deletion, for_deletion_linker, DB);// is it a director? in which case the whole movie gets wiped
 			if(result)																
 				return 0; 															// it is a director, movie delete, CASCADING foreign key will automatically delete characters
 			else if(!result)														// it is not a director, just delete the character, movie intact
@@ -1238,7 +1242,7 @@ int top_five(db_status_t *DB){
 	#endif
 	
 	int top_type;
-	char is_or_isnt[2][6] = { {"IS"}, {"IS NOT"} };		// lazy but easy
+	char is_or_isnt[2][8] = { {"IS NOT"}, {"IS"}  };		// lazy but easy
 	char query[TEXTLEN];
 	printf("According to:\n1. Critics\n2. Users\n");
 	scanf("%d", &top_type);
@@ -1439,9 +1443,38 @@ void helper_print(){
         	"4: Search database\n"
         	"5: Top 5\n"
 			"6: Publications\n"
+			"7: Display all data\n"
         	"H: Help\n"
         	"X: Exit\n"
     );
+}
+
+// quick function to print all data
+void printAll(db_status_t *DB){
+	printf("\nMovies (most columns not shown):\n\n");
+	display(DB->conn, "SELECT id, name, year, duration FROM movies");
+	
+	printf("\nCharacters:\n\n");
+	display(DB->conn, 	"SELECT characters.id, CASE "							// join characters, movies and people tables
+						"WHEN characters.name IS NULL then 'director' "					
+						"ELSE characters.name END AS role, "
+						"people.name, movies.name, movies_id, people_id "
+						"FROM characters "
+						"LEFT JOIN movies ON characters.movies_id = movies.id "
+						"LEFT JOIN people ON characters.people_id = people.id "
+						"ORDER BY people.name");
+	
+	printf("\nGenres:\n\n");
+	display(DB->conn, "SELECT * FROM genres");
+	
+	printf("\nReviewers:\n\n");
+	display(DB->conn, "SELECT * FROM reviewer");
+	
+	printf("\nReviews (text reviews not included)\n\n");
+	display(DB->conn, "SELECT id, movies_id, reviewer_id, grade FROM review");
+	
+	printf("\nPeople:\n\n");
+	display(DB->conn, "SELECT * FROM people");
 }
 
 int main(void){
@@ -1486,6 +1519,8 @@ int main(void){
 			case '6':
 				publication_average(&DB);
 				break;
+			case '7':
+				printAll(&DB);
 			case 'H':
 				helper_print();
 				break;

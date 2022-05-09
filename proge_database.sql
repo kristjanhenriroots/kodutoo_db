@@ -5,7 +5,7 @@
 -- Dumped from database version 14.2
 -- Dumped by pg_dump version 14.2
 
--- Started on 2022-05-06 00:35:48
+-- Started on 2022-05-08 16:19:00
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -267,7 +267,7 @@ CREATE TABLE public.review (
     movies_id integer NOT NULL,
     reviewer_id integer NOT NULL,
     text_review text,
-    grade numeric(2,1) NOT NULL
+    grade numeric(3,1) NOT NULL
 );
 
 
@@ -403,6 +403,33 @@ COPY public.characters (id, name, people_id, movies_id, profession) FROM stdin;
 1	Bruce Wayne / Batman	1	1	actor
 3	Lt. James Gordon	2	1	actor
 4	\N	3	1	director
+25	Selina Kyle / Catwoman	18	1	actress
+26	\N	20	15	director
+27	Marty McFly	19	15	actor
+28	\N	20	16	director
+29	Marty McFly	19	16	actor
+30	Dr. Emmet Brown	21	15	actor
+31	Dr. Emmet Brown	21	16	actor
+32	\N	20	17	director
+33	Dr. Emmet Brown	21	17	actor
+34	Marty McFly	19	17	actor
+35	\N	22	18	director
+36	Cooper	23	18	actor
+37	\N	24	19	director
+38	Valdis	25	19	actor
+39	\N	27	20	director
+40	Truman Burbank	26	20	actor
+41	\N	28	21	director
+42	Johnny	28	21	actor
+43	\N	29	22	director
+44	Carl	26	22	actor
+45	\N	30	23	director
+46	Jesse Pinkman	31	23	actor
+47	\N	32	24	director
+49	Tina Carlyle	33	24	actress
+48	Stanley Ipkiss / The Mask	26	24	actor
+50	\N	34	25	director
+51	Ace Ventura	26	25	actor
 \.
 
 
@@ -450,6 +477,40 @@ COPY public.movie_genres (id, genres_id, movies_id) FROM stdin;
 1	3	1
 2	8	1
 3	10	1
+11	4	15
+12	20	15
+13	7	15
+14	7	16
+15	4	16
+16	20	16
+17	4	17
+18	7	17
+19	20	17
+20	4	18
+21	10	18
+22	20	18
+23	3	19
+24	18	19
+25	21	19
+26	7	19
+27	7	20
+28	10	20
+29	10	21
+30	19	21
+31	7	22
+32	19	22
+33	3	23
+34	8	23
+35	10	23
+36	3	24
+37	12	24
+38	7	24
+39	19	24
+40	8	24
+41	3	25
+42	18	25
+43	24	25
+44	7	25
 \.
 
 
@@ -461,7 +522,17 @@ COPY public.movie_genres (id, genres_id, movies_id) FROM stdin;
 
 COPY public.movies (id, name, year, duration, studio, language, age_rating, imdb_score, short_description) FROM stdin;
 1	The Batman	2022	176	Warner Bros. Pictures	English	PG-13	8.0	When a sadistic serial killer begins murdering key political figures in Gotham, Batman is forced to investigate the city's hidden corruption and question his family's involvement.
-10	test movie	2001	0	\N	\N	\N	\N	\N
+15	Back to the Future	1985	116	Universal Pictures	English	PG	8.5	Marty McFly, a typical American teenager of the Eighties, is accidentally sent back to 1955 in a plutonium-powered DeLorean "time machine" invented by a slightly mad scientist. During his often hysterical, always amazing trip back in time, Marty must make certain his teenage parents-to-be meet and fall in love - so he can get back to the future.
+16	Back to the Future Part II	1989	108	Universal Pictures	English	PG	7.8	After visiting 2015, Marty McFly must repeat his visit to 1955 to prevent disastrous changes to 1985...without interfering with his first trip.
+17	Back to the Future Part III	1990	118	Universal Pictures	English	PG	7.4	Stranded in 1955, Marty McFly learns about the death of Doc Brown in 1885 and must travel back in time to save him. With no fuel readily available for the DeLorean, the two must figure how to escape the Old West before Emmett is murdered.
+18	Interstellar	2014	169	Paramount Pictures	English	PG-13	8.6	With our time on Earth coming to an end, a team of explorers undertakes the most important mission in human history, traveling beyond this galaxy to discover whether mankind has a future among the stars.
+19	Tulnukas	2006	21	Parunid ja Vonid	Estonian	Mature	\N	Saanud tüli käigus labidaga löögi pähe, unustab rullnokk Valdis ära kõik, mis tema igapäevases jõmmielus normaalne oli. Kuigi sõbrad üritavad Valdise mälu virgutada, muutub mõistmatu noormees erinevusi vihkavas ühiskonnas peagi häirivalt üleliigseks ning tema pääsemine ei ole sugugi lihtne.
+20	The Truman Show	1998	103	Paramount Pictures	English	PG	8.2	An insurance salesman discovers his whole life is actually a reality TV show.
+21	The Room	2003	99	\N	English	R	3.6	Johnny is a successful bank executive who lives quietly in a San Francisco townhouse with his fiancée, Lisa. One day, putting aside any scruple, she seduces Johnnys best friend, Mark. From there, nothing will be the same again.
+22	Yes Man	2008	104	Warner Bros. Pictures	English	PG-13	6.8	A man challenges himself to say "yes" to everything.
+23	El Camino	2019	122	Netflix	English	TV-MA	7.3	In the wake of his dramatic escape from captivity, Jesse must come to terms with his past in order to forge some kind of future.
+24	The Mask	1994	101	New Line Cinema	English	TV-PG	6.9	An ancient mask transforms a mild-mannered bank clerk (Carrey) into a manic Superdude.
+25	Ace Ventura: Pet Detective	1994	86	Warner Bros. Pictures	English	PG-13	6.9	A goofy detective specializing in animals goes in search of the missing mascot of the Miami Dolphins.
 \.
 
 
@@ -475,10 +546,23 @@ COPY public.people (id, name, nationality) FROM stdin;
 2	Jeffrey Wright	American
 3	Matt Reeves	American
 1	Robert Pattison	British
-4	Kristjan Henri Roots	\N
-10	Tester McTestface	\N
-12	Testname	Estonian
-13	test	eesti
+18	Zoë Kravitz	American
+19	Michael J. Fox	Canadian
+20	Robert Zemeckis	American
+21	Christopher Lloyd	American
+22	Christopher Nolan	British
+23	Matthew McConaughey	American
+24	Rasmus Merivoo	Estonian
+25	Märt Avandi	Estonian
+27	Peter Weir	Australian
+26	Jim Carrey	American / Canadian
+28	Tommy Wiseau	American
+29	Peyton Reed	American
+30	Vince Gilligan	American
+31	Aaron Paul	American
+32	Chuck Russell	American
+33	Cameron Diaz	American
+34	Tom Shadyac	American
 \.
 
 
@@ -491,10 +575,35 @@ COPY public.people (id, name, nationality) FROM stdin;
 COPY public.review (id, movies_id, reviewer_id, text_review, grade) FROM stdin;
 1	1	2	The try-hard Batman movie: Everything about this movie is trying too hard - the over dramatic score, the long shots on characters faces, the overacting, the complex crime story - it all feels it's trying to get an Oscar in every moment. It's overly long, drawn out, and the story feels like a generic crime saga that has the Batman universe shoehorned into it.This movie is not a masterpiece, but it spends a lot of effort making you think it is!	5.0
 2	1	1	Overlong but quite strong as an origin story that works on an emotional level by the end. The cast handles this material well, making it more of a detective yarn with hints of commentary about privilege by the end that could''ve been fleshed out more.	8.0
-3	1	3	\N	8.7
-9	1	7		4.0
-13	1	4		9.0
-14	10	4		9.0
+40	23	3		8.2
+41	24	22	This showcase for the talents of Jim Carrey is adroitly directed, viscerally and visually dynamic and just plain fun.	8.0
+42	24	23	This is without doubt one of Jim Carreys best movies.	10.0
+43	24	3		7.9
+44	25	3		8.5
+45	25	24	Seemingly clueless as to how best to utilize Carrey, or make humorous hay out of its pet-loving shamus central character, Ventura fails to place either Carrey or Ace in the winners circle of memorable screen crazies.	4.0
+19	15	12	Back To The Future is such an inventive and exciting piece of filmmaking that it is impossible to forget about it. The casting of every character involved was absolutely perfect, and the performances were spectacular. I first saw this film when I was six years old, and it is the only movie that I know of that I dont think I could ever get sick of.	10.0
+20	15	13	There arent many films we would describe as perfect, but Robert Zemeckis oh-so-80s time travel tale fits the bill.	10.0
+23	16	14	It twists it, shakes it and stands it on its ear. But as before, the films technical brilliance is the least of its appeals. Satirically acute, intricately structured and deftly paced, it is at heart stout, good and untainted by easy sentiment.	9.0
+24	16	15	While not as good as the original, this sequel still maintains the feel and charm of it predessor and is a worthy follow up.	8.0
+25	17	14	Future III is all smiles, nostalgically respectful of the western genre, serenely sure of the strength of its own more immediate heritage and of our affection for it.	8.0
+26	17	16	It too has no particular reason for being (except, of course, to complete the series and cash in). Its sprightly and inoffensive, though. And, for those who care, it satisfyingly ties up the various plot strands that were flapping in the breeze from the last installment. Back to the Future futurists will feel complete.	5.0
+28	18	17	Interstellar turns out to be the rarest beast in the Hollywood jungle. Its a mass audience picture thats intelligent as well as epic, with a sophisticated script thats as interested in emotional moments as immerisive visuals. Which is saying a lot.	9.0
+29	18	18	With Interstellar, Nolans reach occasionally exceeds his grasp. Thats fine, these days, few other filmmakers dare reach so high to strech our mids so wide.	8.0
+46	25	25	He is so over-energized from the start you keep thinking he will wear out his welcome pronto, an hour and a half later, his lunacy is still hard to take your eyes off.	8.0
+21	15	3	One of my favorite trilogies ever, timeless.	10.0
+22	16	3	Loved the movie, still no hoverboards :(	10.0
+27	18	3	Great movie, greater soundtrack by Hans Zimmer.	9.2
+3	1	3	Pretty good, I liked it :)	8.4
+31	20	18	Hollywoods smartest media satire in years - and a breathrough for Jim Carrey.	9.0
+32	20	17	Adventurous, provocative, even daring.	10.0
+33	20	3		7.4
+34	21	19	A movie that prompts most of its viewers to ask for their money back — before even 30 minutes have passed. Maybe that has something to do with the extreme unpleasantness of watching Wiseau (as banker Johnny) and actress Juliette Danielle (as his fiancee) engage in a series of soft-core sex scenes, or with the overall ludicrousness of a film whose primary goal, apparently, is to convince us that the freakish Wiseau is actually a normal, everyday sort of guy.	1.0
+35	22	18	Though the movie is no more than agreeable, it does provide a swell showcase for New Zealand wundercomic Rhys Darby ()[and gives the astrally adorable Zooey Deschanel a rare shot at a lead role in a big Hollywood movie.	5.0
+36	22	20	Genial but slim, picture is certainly a light-hearted alternative to weighty year-end awards bait, but the conceit is not realized fully enough.	6.0
+30	19	3	National classic.	10.1
+37	22	3		6.4
+38	23	16	El Camino is not horrible, but it is not commendable either, and given the legacy of Breaking Bad, mildly enteraining is not good enough.	5.0
+39	23	21	Its a true movie, with the taut pacing, satisfying conclusion and grand visual scale that distinction implies.	8.0
 \.
 
 
@@ -507,9 +616,21 @@ COPY public.review (id, movies_id, reviewer_id, text_review, grade) FROM stdin;
 COPY public.reviewer (id, name, publication) FROM stdin;
 1	Jim Laczkowski	Director's Club
 2	tloader-1	\N
-3	Kristjan Henri Roots	\N
-4	tester	\N
-7	Average Tester	Director's Club
+12	Anonymous_Maxine	\N
+13	Tom Huddleston	TimeOut
+14	Richard Schickel	TIME
+15	geewah	\N
+16	Peter Rainer	Los Angeles Times
+17	Kenneth Turan	Los Angeles Times
+18	Richard Corliss	TIME
+19	Scott Foundas	Variety
+20	Brian Lowry	Variety
+21	Judy Berman	TIME
+22	Leonard Klady	Variety
+23	danielb1982	\N
+3	Kristjan Henri Roots	admin
+24	Steven Gaydos	Variety
+25	Chris Willman	Los Angeles Times
 \.
 
 
@@ -519,7 +640,7 @@ COPY public.reviewer (id, name, publication) FROM stdin;
 -- Name: characters_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.characters_id_seq', 15, true);
+SELECT pg_catalog.setval('public.characters_id_seq', 51, true);
 
 
 --
@@ -528,7 +649,7 @@ SELECT pg_catalog.setval('public.characters_id_seq', 15, true);
 -- Name: genres_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.genres_id_seq', 26, true);
+SELECT pg_catalog.setval('public.genres_id_seq', 27, true);
 
 
 --
@@ -537,7 +658,7 @@ SELECT pg_catalog.setval('public.genres_id_seq', 26, true);
 -- Name: movie_genres_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.movie_genres_id_seq', 8, true);
+SELECT pg_catalog.setval('public.movie_genres_id_seq', 44, true);
 
 
 --
@@ -546,7 +667,7 @@ SELECT pg_catalog.setval('public.movie_genres_id_seq', 8, true);
 -- Name: movies_movie_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.movies_movie_id_seq', 10, true);
+SELECT pg_catalog.setval('public.movies_movie_id_seq', 25, true);
 
 
 --
@@ -555,7 +676,7 @@ SELECT pg_catalog.setval('public.movies_movie_id_seq', 10, true);
 -- Name: people_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.people_id_seq', 13, true);
+SELECT pg_catalog.setval('public.people_id_seq', 34, true);
 
 
 --
@@ -564,7 +685,7 @@ SELECT pg_catalog.setval('public.people_id_seq', 13, true);
 -- Name: review_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.review_id_seq', 14, true);
+SELECT pg_catalog.setval('public.review_id_seq', 46, true);
 
 
 --
@@ -573,7 +694,7 @@ SELECT pg_catalog.setval('public.review_id_seq', 14, true);
 -- Name: reviewer_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.reviewer_id_seq', 7, true);
+SELECT pg_catalog.setval('public.reviewer_id_seq', 25, true);
 
 
 --
@@ -676,12 +797,12 @@ ALTER TABLE ONLY public.reviewer
 
 
 --
--- TOC entry 3214 (class 2606 OID 16597)
+-- TOC entry 3214 (class 2606 OID 16609)
 -- Name: characters unique; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.characters
-    ADD CONSTRAINT "unique" UNIQUE (people_id, movies_id);
+    ADD CONSTRAINT "unique" UNIQUE (name, people_id, movies_id, profession);
 
 
 --
@@ -747,7 +868,7 @@ ALTER TABLE ONLY public.characters
     ADD CONSTRAINT person_id FOREIGN KEY (people_id) REFERENCES public.people(id) ON DELETE CASCADE NOT VALID;
 
 
--- Completed on 2022-05-06 00:35:48
+-- Completed on 2022-05-08 16:19:00
 
 --
 -- PostgreSQL database dump complete
