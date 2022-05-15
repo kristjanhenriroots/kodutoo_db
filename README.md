@@ -1,0 +1,1 @@
+docker run -e POSTGRES_PASSWORD=mysecretpassword -e PGDATA=/var/lib/postgresql/data/pgdata -v "$PWD":/var/lib/postgresql/data -p 5432:5432 --rm -d postgres
